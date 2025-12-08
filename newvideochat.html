@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Eye-Popping Snap Chat & Share</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
+  <style>
+    body {
+      min-height: 100vh;
+      background: linear-gradient(120deg,#55d6be 0%,#3584e4 100%);
+      font-family: 'Poppins', Arial, sans-serif;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: bgmove 12s infinite alternate;
+    }
+    @keyframes bgmove {
+      0% {background-position: 0 0;}
+      100% {background-position: 100vw 100vh;}
+    }
+    #app {
+      background: rgba(255,255,255,0.94);
+      padding: 26px 40px 28px 40px;
+      border-radius: 2.1em;
+      box-shadow: 0 10px 48px #2c529966, 0 1.5px 12px #39c5b47a;
+      max-width: 740px;
+      width: 98vw;
+      margin: 20px;
+    }
+    h2 {
+      margin:0 0 20px 0;
+      font-size:1.9em;
+      font-weight:700;
+      letter-spacing:-2px;
+      color:#2670de;
+      text-shadow:0px 4px 24px #90eaeab1;
+      text-align:center;
+    }
+    .flexrow {
+      display:flex;
+      align-items:center;
+      gap:16px;
+      margin-bottom:17px;
+      justify-content:center;
+    }
+    #controls, #shareBtns {
+      display:flex;gap:13px;margin-bottom:15px;justify-content:center;
+    }
+    input[type=text]{
+      font-size:1.08em;
+      padding:9px 14px;
+      border-radius:0.7em;
+      border:1.8px solid #48e0e2;
+      outline: none;
+      background:#f4fafb;
+      transition: border .17s;
+    }
+    input[type=text]:focus{border-color:#2670de;}
+    button {
+      background: linear-gradient(90deg,#48e0e2 0,#2670fa 100%);
+      border:none;color:#fff;font-weight:700;
+      border-radius:0.7em;
+      padding:11px 20px 12px 20px;
+      font-size:1.07em;
+      box-shadow: 0 2px 11px #43c7e955;
+      letter-spacing:-.5px;
+      cursor:pointer;transition:background 0.15s,transform 0.12s;
+    }
+    button:active{transform:scale(0.96);}
+    .videoWrap,.snapWrap{
+      background:#2bb9be11;
+      border: 2.3px solid #70ddf1af;
+      border-radius:1.4em;
+      box-shadow:0 3px 17px #1c397c28;
+      margin-bottom:13px;
+      padding: 16px 10px 7px 10px;
+      display:flex; gap:12px; justify-content:center; align-items:flex-end;
+      min-height:190px;
+    }
+    video,canvas,img.preview {
+      border-radius:.7em; box-shadow:0 2px 12px #1670b36a;
+      border:1.8px solid #70ddf181; background:#d7ebf8;
+      margin:0 7px 6px 7px;max-height:175px; min-width:200px;
+    }
+    .nameTag{font-size:1.04em;color:#2196f3;text-align:center;font-weight:700;letter-spacing:-.5px; margin-top:3px;}
+    #remoteSnaps .remote-face {margin:0 14px;display:inline-block;text-align:center;box-shadow:0 3.5px 19px #63f0e554;padding-bottom:5px; border-radius:1.2em;background:#f7fbfc99;}
+    #remoteSnaps img.preview{border:2.3px solid #58c4e7bb;}
+    #fileArea {
+      border:2.2px dashed #2bdbb8b2; background:#f7fafbaf;
+      border-radius:1.1em;padding:14px 9px;margin-top:10px;box-shadow:0 2px 11px #29a8e168;text-align:center;
+      min-height:30px;
+    }
+    .file-link {font-size:1.01em;color:#135fc9;padding:5px 2px;font-weight:600;text-decoration:underline;cursor:pointer;margin:6px;}
+    .file-status{font-size:.97em;color:#057c0e;}
+    @media (max-width:780px){#app{padding:15px 3vw;}}
+  </style>
+</head>
+<body>
+<div id="app">
+  <h2>Stunning Snap & Screen Share</h2>
+  <div class="flexrow"><input type="text" id="nameInput" placeholder="Display Name..."><button id="startBtn">Start Chat</button></div>
+  <div id="controls" style="display:none;">
+    <div id="shareBtns">
+      <button id="toggleVideo">Mute Video</button>
+      <button id="screenShare">Share Screen</button>
+      <label for="uploadFile" style="background:#ffe655;color:#0c567c;box-shadow:none;border:none;cursor:pointer;padding:10px 19px 10px 19px;font-weight:700;border-radius:0.7em;">📁 Send File</label>
+      <input type="file" id="uploadFile" style="display:none">
+    </div>
+  </div>
+  <div class="videoWrap">
+   <span style="text-align:center;min-width:100px;display:inline-block;">
+     <video id="video" width="220" height="170" autoplay muted playsinline></video>
+     <div class="nameTag" id="myName"></div>
+   </span>
+   <canvas id="snap" width="220" height="170" style="display:none;"></canvas>
+   <span id="remoteSnaps"></span>
+  </div>
+  <div id="fileArea"></div>
+</div>
+<script>
+// ==== PubNub/Credentials/User Setup ====
+let user, pubnub, streaming = false, snapTimer = null, shareScreening = false;
+const CHANNEL = 'video_snap_demo';
+const startBtn = document.getElementById('startBtn');
+const nameInput = document.getElementById('nameInput');
+const video = document.getElementById('video');
+const snap = document.getElementById('snap');
+const remoteSnaps = document.getElementById('remoteSnaps');
+const controls = document.getElementById('controls');
+const myName = document.getElementById('myName');
+const fileArea = document.getElementById('fileArea');
+
+startBtn.onclick = async function() {
+  user = nameInput.value.trim() || 'Anon';
+  myName.innerText = user + ' (You)';
+  streaming = true;
+  controls.style.display = '';
+  startBtn.disabled = true; nameInput.disabled = true;
+  // Enable camera
+  let stream = await navigator.mediaDevices.getUserMedia({video:{frameRate:{ideal:7,max:7},width:220,height:170},audio:false});
+  video.srcObject = stream;
+  window._videoTrack = stream.getVideoTracks()[0]; // for mute toggle
+
+  pubnub = new PubNub({
+    publishKey : 'pub-c-8d5cec96-c250-4170-80b2-7be45186ec29',
+    subscribeKey : 'sub-c-c6afe2b7-df0b-4815-ab83-2eec5b4a4d34',
+    uuid: user
+  });
+  pubnub.subscribe({channels:[CHANNEL]});
+  pubnub.addListener({ message: mainMsgHandler });
+  snapTimer = setInterval(sendSnap, 143); // 7 fps
+};
+let videoMuted = false;
+document.getElementById('toggleVideo').onclick = function(){
+  videoMuted = !videoMuted;
+  _videoTrack.enabled = !videoMuted;
+  this.innerText = videoMuted ? 'Unmute Video':'Mute Video';
+};
+// --------- Grab & Send Snap/Screen@7fps ---------
+function sendSnap() {
+  if (!streaming) return;
+  if (!shareScreening) snap.getContext('2d').drawImage(video, 0, 0, snap.width, snap.height);
+  let data = snap.toDataURL('image/jpeg', 0.65);
+  pubnub.publish({channel:CHANNEL, message:{user,type:'snap',data}});
+}
+// Screen Share
+let screenStream;
+document.getElementById('screenShare').onclick = async function(){
+  if(shareScreening){ // back to camera
+    snapTimer && clearInterval(snapTimer);
+    let camStream = await navigator.mediaDevices.getUserMedia({video:{frameRate:{ideal:7,max:7},width:220,height:170},audio:false});
+    video.srcObject = camStream;
+    window._videoTrack = camStream.getVideoTracks()[0];
+    shareScreening = false;
+    this.innerText='Share Screen';
+    snapTimer = setInterval(sendSnap,143);
+    return;
+  }
+  // switch to screen
+  screenStream = await navigator.mediaDevices.getDisplayMedia({video:{frameRate:7},audio:false});
+  video.srcObject = screenStream;
+  window._videoTrack = screenStream.getVideoTracks()[0];
+  shareScreening = true;
+  this.innerText='Stop Screen';
+  snapTimer && clearInterval(snapTimer);
+  snapTimer = setInterval(()=>{
+      snap.getContext('2d').drawImage(video, 0, 0, snap.width, snap.height);
+      sendSnap();
+    },143);
+};
+function handleSnap(msg) {
+  if(msg.message.type !== 'snap' || msg.message.user===user) return;
+  const id = 'snap_' + (msg.message.user||'anon');
+  let faceBox = document.getElementById(id);
+  if (!faceBox) {
+    let faceDiv = document.createElement('div');
+    faceDiv.className='remote-face'; faceDiv.id=id;
+    let im = document.createElement('img'); im.className='preview';
+    im.width=220; im.height=170;
+    faceDiv.appendChild(im);
+    let cap=document.createElement('div'); cap.className='nameTag'; cap.innerText=msg.message.user;
+    faceDiv.appendChild(cap);
+    remoteSnaps.appendChild(faceDiv);
+    faceBox=faceDiv;
+  }
+  faceBox.querySelector('img').src=msg.message.data;
+}
+// ---------- Chunked File Share -----------
+function splitFileToChunks(arrayBuffer, chunkSize=60*1024){
+  let out=[];
+  for(let i=0; i<arrayBuffer.byteLength; i+=chunkSize)
+    out.push(arrayBuffer.slice(i,i+chunkSize));
+  return out;
+}
+let incomingFiles={};
+document.getElementById('uploadFile').addEventListener('change',function(e){
+  let file=e.target.files[0]; if(!file)return;
+  let fr=new FileReader();
+  fr.onload=function(evt){
+    let ab=evt.target.result;
+    let chunks=splitFileToChunks(ab);
+    let fileId=Math.random().toString(36).slice(2)+Date.now().toString(36);
+    fileArea.innerHTML+=`<div class='file-status'>Sending ${file.name} in ${chunks.length} chunks</div>`;
+    pubnub.publish({channel:CHANNEL,message:{user,type:'fileStart',fileId,name:file.name,total:chunks.length}});
+    chunks.forEach((chunk,idx)=>{
+      pubnub.publish({channel:CHANNEL,message:{user,type:'fileChunk',fileId,index:idx,data:Array.from(new Uint8Array(chunk)),total:chunks.length}});
+    });
+  };
+  fr.readAsArrayBuffer(file);
+  e.target.value="";
+});
+function handleFile(msg){
+  const {user:typeUser,type:fileType,fileId,name,index,data,total} = msg.message;
+  if(fileType==='fileStart'){
+    incomingFiles[fileId]={name,chunkArr:[],total,received:0};
+    let fdiv=document.createElement('div'); fdiv.id='DL_'+fileId;
+    fdiv.className='file-status';
+    fdiv.innerText=`Receiving ${name}...`;
+    fileArea.appendChild(fdiv);
+    return;
+  } else if(fileType==='fileChunk'){
+    let f=incomingFiles[fileId];
+    if(!f)return;
+    f.chunkArr[index]=new Uint8Array(data);f.received++;
+    if(f.received===f.total){
+      let blob=new Blob(f.chunkArr);
+      let url=URL.createObjectURL(blob);
+      let dlDiv=document.getElementById('DL_'+fileId);
+      dlDiv.innerHTML=`<a class='file-link' href='${url}' download='${f.name}'>Download ${f.name}</a> <span class='file-status'>Done!</span>`;
+      setTimeout(()=>URL.revokeObjectURL(url),8*60000);
+      delete incomingFiles[fileId];
+    }
+  }
+}
+function mainMsgHandler(msg){
+  handleSnap(msg); handleFile(msg);
+}
+</script>
+</body>
+</html>
+
+
+
+Simply copy, use as your HTML file, and it’s ready for your PubNub keys and demo usage!
