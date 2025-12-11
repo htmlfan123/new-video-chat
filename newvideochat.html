@@ -143,8 +143,8 @@ startBtn.onclick = async function() {
   window._videoTrack = stream.getVideoTracks()[0]; // for mute toggle
 
   pubnub = new PubNub({
-    publishKey : 'pub-c-8d5cec96-c250-4170-80b2-7be45186ec29',
-    subscribeKey : 'sub-c-c6afe2b7-df0b-4815-ab83-2eec5b4a4d34',
+    publishKey : 'pub-c-30824ab7-4109-404e-a2fa-f35052a29b74',
+    subscribeKey : 'sub-c-d463fda3-214e-4557-8fae-ee1c1bbf7080',
     uuid: user
   });
   pubnub.subscribe({channels:[CHANNEL]});
